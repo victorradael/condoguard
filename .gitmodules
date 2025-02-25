@@ -1,0 +1,9 @@
+[submodule "api"]
+	path = api
+	url = https://github.com/victorradael/condoguard-api
+[submodule "web"]
+	path = web
+	url = https://github.com/victorradael/condoguard-interface
+[submodule "app"]
+	path = app
+	url = https://github.com/victorradael/condoguard-app

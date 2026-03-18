@@ -1,0 +1,63 @@
+name: API — Go CI
+
+on:
+  push:
+    paths:
+      - "api/**"
+  pull_request:
+    paths:
+      - "api/**"
+
+defaults:
+  run:
+    working-directory: api
+
+jobs:
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27018:27017
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: secret
+          MONGO_INITDB_DATABASE: condoguard_test
+        options: >-
+          --health-cmd "mongosh --eval \"db.adminCommand('ping')\""
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: api/go.sum
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Unit tests
+        run: go test ./... -short -race -count=1
+
+      - name: Integration tests
+        env:
+          MONGODB_URI: mongodb://root:secret@localhost:27018/condoguard_test?authSource=admin
+          JWT_SECRET_KEY: dGVzdC1zZWNyZXQta2V5LWZvci1jaS10ZXN0aW5n
+        run: go test ./... -run Integration -race -count=1
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: api

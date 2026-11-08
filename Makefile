@@ -5,6 +5,8 @@ BACKUP ?=
 # Arquivos gravados no host (backups, resultados do k6) ficam com o seu usuário.
 export HOST_UID := $(shell id -u)
 export HOST_GID := $(shell id -g)
+# Mesma pasta que o compose usa; criada antes do bind mount para não nascer como root.
+export BACKUP_DIR ?= $(or $(shell sed -n 's/^BACKUP_DIR=//p' .env 2>/dev/null | tail -n1),./backups)
 
 .DEFAULT_GOAL := help
 .PHONY: help env up down ps logs build seed seed-poc reset-demo backup restore \
@@ -46,6 +48,7 @@ reset-demo: .env ## Apaga e recria só os dados de demonstração
 	@sh scripts/seed.sh reset-demo
 
 backup: .env ## Backup do Postgres e do MinIO em $(BACKUP_DIR)
+	@mkdir -p "$(BACKUP_DIR)"
 	$(COMPOSE) --profile tools run --rm backup backup $(BACKUP)
 
 restore: .env ## Restaura um backup (BACKUP=nome; padrão: o último)
@@ -53,6 +56,7 @@ restore: .env ## Restaura um backup (BACKUP=nome; padrão: o último)
 		printf 'Isto SUBSTITUI o banco e os arquivos atuais. Continuar? [s/N] '; \
 		read r; [ "$$r" = "s" ] || [ "$$r" = "S" ] || exit 1; \
 	fi
+	@mkdir -p "$(BACKUP_DIR)"
 	-$(COMPOSE) stop api
 	$(COMPOSE) --profile tools run --rm backup restore $(BACKUP)
 	$(COMPOSE) up -d api

@@ -15,6 +15,8 @@ COMPOSE=${COMPOSE:-docker compose}
 HOST_UID=$(id -u)
 HOST_GID=$(id -g)
 export HOST_UID HOST_GID
+# Sem isto o Docker cria a pasta do bind mount como root e o backup (seu UID) não grava.
+mkdir -p "${BACKUP_DIR:-./backups}"
 
 if [ "${CONFIRM:-}" != "1" ]; then
 	echo "test-backup-restore: isto apaga os volumes do ambiente. Rode com CONFIRM=1." >&2

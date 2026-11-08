@@ -1,12 +1,20 @@
 name: API — Go CI
 
+# The API has its own CI in condoguard-api (runs on every PR there). This job
+# re-runs it here against the submodule commit pinned by this repository.
+
 on:
   push:
     paths:
-      - "api/**"
+      - "api"
+      - ".github/workflows/api-go.yml"
   pull_request:
     paths:
-      - "api/**"
+      - "api"
+      - ".github/workflows/api-go.yml"
+
+permissions:
+  contents: read
 
 defaults:
   run:
@@ -18,27 +26,41 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
-      mongodb:
-        image: mongo:7
+      postgres:
+        image: postgres:17-alpine
         ports:
-          - 27018:27017
+          - 5432:5432
         env:
-          MONGO_INITDB_ROOT_USERNAME: root
-          MONGO_INITDB_ROOT_PASSWORD: secret
-          MONGO_INITDB_DATABASE: condoguard_test
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
         options: >-
-          --health-cmd "mongosh --eval \"db.adminCommand('ping')\""
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      TEST_DATABASE_URL: postgres://postgres@localhost:5432/postgres?sslmode=disable
+      TEST_REDIS_URL: redis://localhost:6379/0
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version-file: api/go.mod
           cache-dependency-path: api/go.sum
 
       - name: Download dependencies
@@ -47,17 +69,11 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Unit tests
-        run: go test ./... -short -race -count=1
-
-      - name: Integration tests
-        env:
-          MONGODB_URI: mongodb://root:secret@localhost:27018/condoguard_test?authSource=admin
-          JWT_SECRET_KEY: dGVzdC1zZWNyZXQta2V5LWZvci1jaS10ZXN0aW5n
-        run: go test ./... -run Integration -race -count=1
+      - name: Tests (unit + PostgreSQL + Redis)
+        run: go test ./... -race -count=1
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          version: v2.15.0
           working-directory: api

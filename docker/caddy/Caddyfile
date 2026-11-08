@@ -1,0 +1,74 @@
+# Caddy é o único ponto de entrada. Duas portas de escuta:
+#
+# - {$SITE_ADDRESS} (https://localhost por padrão): navegador e app na rede
+#   local, com certificado da CA interna do Caddy (`make trust-ca`).
+# - :8080 (HTTP, só na rede interna `edge`): usado pelo cloudflared e pelo k6.
+#   Não é publicado. O IP do cliente vem de Cf-Connecting-IP, que só o túnel
+#   (ou o k6) consegue enviar porque ninguém mais alcança essa porta.
+#
+# Limites de requisição por IP (plugin caddy-ratelimit), ajustáveis no .env:
+# - RATE_LIMIT_AUTH_EVENTS por minuto em /api/auth/* (login, cadastro)
+# - RATE_LIMIT_EVENTS por minuto no restante
+{
+	order rate_limit before basic_auth
+	servers {
+		protocols h1 h2 h3
+	}
+}
+
+(seguranca) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+		-X-Powered-By
+	}
+}
+
+(rotas) {
+	encode zstd gzip
+
+	rate_limit {
+		zone auth {
+			match {
+				path /api/auth/*
+			}
+			key {args[0]}
+			events {$RATE_LIMIT_AUTH_EVENTS:20}
+			window 1m
+		}
+		zone geral {
+			key {args[0]}
+			events {$RATE_LIMIT_EVENTS:600}
+			window 1m
+		}
+	}
+
+	handle_path /api/* {
+		# Métricas internas da API não saem do proxy.
+		@interno path /metrics /metrics/*
+		respond @interno 404
+
+		reverse_proxy api:8080 {
+			header_up X-Real-IP {args[0]}
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}
+
+{$SITE_ADDRESS:localhost} {
+	tls internal
+	import seguranca
+	import rotas {remote_host}
+}
+
+http://:8080 {
+	import seguranca
+	import rotas {http.request.header.Cf-Connecting-IP}
+}

@@ -1,0 +1,336 @@
+# Ambiente local do Condoguard. Guia completo em docs/AMBIENTE_LOCAL.md.
+#
+# Regras deste arquivo:
+# - Nenhum segredo tem valor padrão: tudo vem do .env gerado por `make env`
+#   (scripts/init-secrets.sh). Sem .env, o compose falha com mensagem clara.
+# - Só o Caddy publica porta para fora da máquina. Postgres, Redis, Mailpit e
+#   console do MinIO ficam presos em 127.0.0.1.
+# - Redes separadas: `edge` (Caddy, cloudflared, k6), `app` (Caddy, API, web) e
+#   `data` (API e serviços de dados). O túnel só enxerga o Caddy.
+# - Serviços contínuos têm healthcheck e `restart: unless-stopped`. Os de uso
+#   pontual (minio-setup, backup, k6) rodam e saem, então não têm nenhum dos dois.
+
+name: condoguard
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  # ── Borda ──────────────────────────────────────────────────────────────────
+  caddy:
+    build:
+      context: ./docker/caddy
+    image: condoguard/caddy:local
+    restart: unless-stopped
+    <<: [*hardening, *logging]
+    cap_add:
+      - NET_BIND_SERVICE
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+      RATE_LIMIT_EVENTS: ${RATE_LIMIT_EVENTS:-600}
+      RATE_LIMIT_AUTH_EVENTS: ${RATE_LIMIT_AUTH_EVENTS:-20}
+    ports:
+      - "${CADDY_BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-80}:80"
+      - "${CADDY_BIND_ADDRESS:-0.0.0.0}:${HTTPS_PORT:-443}:443"
+      - "${CADDY_BIND_ADDRESS:-0.0.0.0}:${HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+      - app
+    depends_on:
+      api:
+        condition: service_started
+      web:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.7
+    profiles: ["poc"]
+    restart: unless-stopped
+    <<: [*hardening, *logging]
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --metrics
+      - 127.0.0.1:2000
+      - --config
+      - /etc/cloudflared/config.yml
+      - run
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    networks:
+      - edge
+    depends_on:
+      caddy:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "--metrics", "127.0.0.1:2000", "ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Aplicação ──────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./api
+      dockerfile: ../docker/api.Dockerfile
+    image: condoguard/api:local
+    restart: unless-stopped
+    <<: [*hardening, *logging]
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      APP_ENV: local
+      PORT: "8080"
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?rode make env}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://localhost}
+      # Papel sem privilégios de dono: é com ele que a RLS da 1b vai valer.
+      DATABASE_URL: postgres://condoguard_app:${POSTGRES_APP_PASSWORD:?rode make env}@postgres:5432/condoguard?sslmode=disable
+      # Dono do esquema: usado só para rodar as migrações (goose) ao subir.
+      DATABASE_MIGRATIONS_URL: postgres://condoguard_owner:${POSTGRES_OWNER_PASSWORD:?rode make env}@postgres:5432/condoguard?sslmode=disable
+      DB_MIGRATE_ON_START: "true"
+      REDIS_URL: redis://:${REDIS_PASSWORD:?rode make env}@redis:6379/0
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      MAIL_FROM: ${MAIL_FROM:-Condoguard <nao-responda@condoguard.local>}
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: ${S3_BUCKET:-condoguard}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?rode make env}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?rode make env}
+      S3_USE_PATH_STYLE: "true"
+    networks:
+      - app
+      - data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-setup:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+
+  web:
+    build:
+      context: ./web
+      dockerfile: ../docker/web.Dockerfile
+      args:
+        # Mesmo domínio do web: o Caddy encaminha /api/* para a API, sem CORS.
+        NEXT_PUBLIC_API_URL: /api
+    image: condoguard/web:local
+    restart: unless-stopped
+    <<: [*hardening, *logging]
+    networks:
+      - app
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+  # ── Dados ──────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:17.11-alpine
+    restart: unless-stopped
+    <<: *logging
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?rode make env}
+      POSTGRES_DB: condoguard
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+      POSTGRES_OWNER_PASSWORD: ${POSTGRES_OWNER_PASSWORD:?rode make env}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?rode make env}
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "condoguard"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7.4.12-alpine
+    restart: unless-stopped
+    <<: *logging
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --appendfsync everysec --requirepass "$$REDIS_PASSWORD"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?rode make env}
+    ports:
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    restart: unless-stopped
+    <<: *logging
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: "5000"
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+    volumes:
+      - mailpit_data:/data
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # O MinIO oficial foi arquivado e não publica mais imagens. Usamos o fork
+  # comunitário mantido pela pgsty, que preserva o console. Ver o guia.
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    restart: unless-stopped
+    <<: *logging
+    security_opt:
+      - no-new-privileges:true
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?rode make env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?rode make env}
+      MINIO_BROWSER_REDIRECT_URL: http://127.0.0.1:${MINIO_CONSOLE_PORT:-9001}
+    ports:
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Cria o bucket e um usuário da API com acesso só a ele (sem chave de root).
+  minio-setup:
+    image: pgsty/mc:RELEASE.2026-10-26T00-00-00Z
+    <<: [*hardening, *logging]
+    entrypoint: ["/bin/sh", "/setup/minio-setup.sh"]
+    environment:
+      MC_CONFIG_DIR: /tmp/mc
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?rode make env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?rode make env}
+      S3_BUCKET: ${S3_BUCKET:-condoguard}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?rode make env}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?rode make env}
+    volumes:
+      - ./docker/minio:/setup:ro
+    networks:
+      - data
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  # ── Ferramentas sob demanda (perfil tools) ─────────────────────────────────
+  backup:
+    build:
+      context: ./docker/backup
+    image: condoguard/backup:local
+    profiles: ["tools"]
+    <<: *logging
+    security_opt:
+      - no-new-privileges:true
+    user: "${HOST_UID:-0}:${HOST_GID:-0}"
+    environment:
+      MC_CONFIG_DIR: /tmp/mc
+      PGHOST: postgres
+      PGUSER: postgres
+      PGDATABASE: condoguard
+      PGPASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?rode make env}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?rode make env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?rode make env}
+    volumes:
+      - ${BACKUP_DIR:-./backups}:/backups
+    networks:
+      - data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  k6:
+    image: grafana/k6:2.3.0
+    profiles: ["tools"]
+    <<: [*hardening, *logging]
+    user: "${HOST_UID:-12345}:${HOST_GID:-12345}"
+    environment:
+      BASE_URL: http://caddy:8080
+      K6_USERNAME: ${K6_USERNAME:-}
+      K6_PASSWORD: ${K6_PASSWORD:-}
+    volumes:
+      - ./loadtest:/scripts:ro
+      - ./loadtest/results:/results
+    networks:
+      - edge
+
+networks:
+  edge:
+  app:
+  data:
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_data:
+  redis_data:
+  mailpit_data:
+  minio_data:

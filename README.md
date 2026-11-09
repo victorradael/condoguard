@@ -58,6 +58,9 @@ Passo a passo para Linux, macOS e Windows/WSL, backup, teste de carga e PoC
 pelo Cloudflare Tunnel em [`docs/AMBIENTE_LOCAL.md`](docs/AMBIENTE_LOCAL.md).
 `make help` lista todos os comandos.
 
+> Já tinha o ambiente de pé antes da FAB-16 (sub-rede fixa da rede `app`)?
+> Rode `make down && make up` uma vez para o Docker recriar a rede.
+
 ## Licença
 
 [GNU General Public License v3.0](api/LICENSE)

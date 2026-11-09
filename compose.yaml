@@ -149,6 +149,9 @@ services:
     image: condoguard/web:local
     restart: unless-stopped
     <<: [*hardening, *logging]
+    environment:
+      # Só do servidor (middleware), lida em runtime: /api relativa não serve no fetch do Node.
+      API_INTERNAL_URL: http://api:8080
     networks:
       - app
     healthcheck:

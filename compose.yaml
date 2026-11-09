@@ -105,6 +105,8 @@ services:
       PORT: "8080"
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?rode make env}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://localhost}
+      # O Caddy expõe a API em /api/*: o cookie de refresh precisa de Path=/api/auth.
+      COOKIE_PATH_PREFIX: /api
       # Papel sem privilégios de dono: é com ele que a RLS da 1b vai valer.
       DATABASE_URL: postgres://condoguard_app:${POSTGRES_APP_PASSWORD:?rode make env}@postgres:5432/condoguard?sslmode=disable
       # Dono do esquema: usado só para rodar as migrações (goose) ao subir.
@@ -317,7 +319,7 @@ services:
     user: "${HOST_UID:-12345}:${HOST_GID:-12345}"
     environment:
       BASE_URL: http://caddy:8080
-      K6_USERNAME: ${K6_USERNAME:-}
+      K6_EMAIL: ${K6_EMAIL:-}
       K6_PASSWORD: ${K6_PASSWORD:-}
     volumes:
       - ./loadtest:/scripts:ro

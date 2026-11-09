@@ -10,7 +10,7 @@
 // cabeçalho na porta interna :8080), então o limite por IP vale por usuário,
 // como na vida real. Respostas 429 contam à parte e não entram como erro.
 //
-// Conta: K6_USERNAME/K6_PASSWORD (contas do seed). Sem elas, o setup() cria
+// Conta: K6_EMAIL/K6_PASSWORD (contas do seed). Sem elas, o setup() cria
 // uma conta descartável via /auth/register (provisório, até a 1c).
 
 import http from 'k6/http';
@@ -54,7 +54,7 @@ export const options = {
   summaryTrendStats: ['avg', 'med', 'p(90)', 'p(95)', 'p(99)', 'max'],
 };
 
-const LISTAGENS = ['/residents', '/expenses', '/notifications', '/shopOwners'];
+const LISTAGENS = ['/residents', '/expenses', '/notifications', '/shop-owners'];
 
 function headersDoVU(extra) {
   const vu = __VU || 0;
@@ -76,20 +76,21 @@ function registrar(res) {
 }
 
 export function setup() {
-  let username = __ENV.K6_USERNAME;
+  let email = __ENV.K6_EMAIL;
   let password = __ENV.K6_PASSWORD;
-  if (!username) {
+  if (!email) {
     const sufixo = `${Date.now()}`;
-    username = `k6-${sufixo}`;
+    const username = `k6-${sufixo}`;
+    email = `${username}@k6.condoguard.local`;
     password = `K6-senha-${sufixo}-${Math.random().toString(36).slice(2)}`;
     const res = http.post(
       `${BASE_URL}/api/auth/register`,
-      JSON.stringify({ username, email: `${username}@k6.condoguard.local`, password }),
+      JSON.stringify({ username, email, password }),
       { headers: headersDoVU() },
     );
     if (res.status !== 201) fail(`cadastro da conta do k6 falhou: ${res.status} ${res.body}`);
   }
-  return { username, password };
+  return { email, password };
 }
 
 let token = null;
@@ -97,12 +98,12 @@ let token = null;
 function login(conta) {
   const res = http.post(
     `${BASE_URL}/api/auth/login`,
-    JSON.stringify({ username: conta.username, password: conta.password }),
+    JSON.stringify({ email: conta.email, password: conta.password }),
     { headers: headersDoVU(), tags: { grupo: 'login', name: 'POST /auth/login' } },
   );
   registrar(res);
   check(res, { 'login 200': (r) => r.status === 200 });
-  if (res.status === 200) token = res.json('token');
+  if (res.status === 200) token = res.json('accessToken');
 }
 
 export default function (conta) {

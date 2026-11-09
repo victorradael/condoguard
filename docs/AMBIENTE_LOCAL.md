@@ -114,7 +114,7 @@ A CA fica no volume `caddy_data`. Se você apagar os volumes, rode
 |---|---|
 | <https://localhost> | tela de login do web |
 | <https://localhost/api/health> | `{"status":"ok"}` |
-| <https://localhost/api/docs> | Swagger da API |
+| <https://localhost/api/docs> | Swagger da API (só admin; entre no web como admin antes) |
 | <http://127.0.0.1:8025> | caixa de e-mails do Mailpit |
 | <http://127.0.0.1:9001> | console do MinIO (usuário `MINIO_ROOT_USER` e senha `MINIO_ROOT_PASSWORD` do `.env`) |
 
@@ -192,7 +192,7 @@ passarem de 0,5% (limites em dobro no pico). Respostas 429 do limite de
 requisições contam à parte. Os resultados ficam em `loadtest/results/`.
 
 Para medir com os dados da PoC, rode `make seed-poc` antes e defina
-`K6_USERNAME`/`K6_PASSWORD` no `.env` com uma das contas de teste. Anote as
+`K6_EMAIL`/`K6_PASSWORD` no `.env` com uma das contas de teste. Anote as
 especificações da máquina junto com cada resultado.
 
 ## PoC pela internet (Cloudflare Tunnel)

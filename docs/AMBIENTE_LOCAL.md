@@ -10,8 +10,8 @@ Um comando (`make up`) sobe o sistema inteiro em containers, com HTTPS em
 | `caddy` | Proxy reverso, único ponto de entrada, HTTPS local, limite de requisições | `https://localhost` (portas 80 e 443) |
 | `web` | Web em Next.js | via Caddy, em `/` |
 | `api` | API em Go | via Caddy, em `/api/*` (ex.: `/api/health`, `/api/docs`) |
-| `postgres` | PostgreSQL 17, volume persistente | `127.0.0.1:5432` |
-| `redis` | Redis 7 com AOF | `127.0.0.1:6379` |
+| `postgres` | PostgreSQL 18, volume persistente | `127.0.0.1:5432` |
+| `redis` | Redis 8 com AOF | `127.0.0.1:6379` |
 | `mailpit` | Recebe os e-mails do sistema | `http://127.0.0.1:8025` |
 | `minio` | Arquivos (S3) | console em `http://127.0.0.1:9001` |
 | `minio-setup` | Cria o bucket e a credencial da API; roda e sai | — |

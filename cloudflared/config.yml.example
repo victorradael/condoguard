@@ -1,0 +1,14 @@
+# Modelo da configuração do túnel nomeado (perfil `poc`).
+# Copie para cloudflared/config.yml e troque TUNNEL_ID e o hostname.
+# Passo a passo em docs/AMBIENTE_LOCAL.md, seção "PoC pela internet".
+#
+# O config.yml e o arquivo de credenciais <TUNNEL_ID>.json ficam fora do git.
+# A única origem permitida é o Caddy (`make check` confere).
+
+tunnel: TUNNEL_ID
+credentials-file: /etc/cloudflared/TUNNEL_ID.json
+
+ingress:
+  - hostname: condoguard.example.com
+    service: http://caddy:8080
+  - service: http_status:404

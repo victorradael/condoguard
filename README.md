@@ -45,6 +45,19 @@ Se já clonou sem os submódulos:
 git submodule update --init --recursive
 ```
 
+## Ambiente local
+
+Com Docker e Make instalados, um comando sobe tudo (API, web, PostgreSQL, Redis,
+Mailpit, MinIO e Caddy) em `https://localhost`:
+
+```bash
+make up
+```
+
+Passo a passo para Linux, macOS e Windows/WSL, backup, teste de carga e PoC
+pelo Cloudflare Tunnel em [`docs/AMBIENTE_LOCAL.md`](docs/AMBIENTE_LOCAL.md).
+`make help` lista todos os comandos.
+
 ## Licença
 
 [GNU General Public License v3.0](api/LICENSE)

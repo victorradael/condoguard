@@ -1,0 +1,11 @@
+# Ambiente local: segredos e dados gerados nunca entram no git.
+.env
+.env.*
+!.env.example
+.local/
+backups/
+loadtest/results/
+
+# Túnel da Cloudflare: só o modelo é versionado.
+cloudflared/*
+!cloudflared/config.yml.example

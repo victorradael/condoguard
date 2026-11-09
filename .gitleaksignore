@@ -1,0 +1,5 @@
+# Achados revisados. Cada linha precisa de justificativa.
+#
+# Chave de teste do CI da API ("test-secret-key-for-ci-testing" em Base64),
+# usada só nos testes de integração com um banco descartável. Não é segredo.
+603d13bdd49062b95e3db8c470d31357f47b3d65:.github/workflows/api-go.yml:generic-api-key:56

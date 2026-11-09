@@ -1,5 +1,5 @@
 # Imagem do web (Next.js) usada pelo ambiente local. Contexto de build: ./web
-FROM node:22.23.4-alpine AS build
+FROM node:26.13.0-alpine AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
@@ -10,7 +10,7 @@ ARG NEXT_PUBLIC_API_URL=/api
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN npm run build
 
-FROM node:22.23.4-alpine
+FROM node:26.13.0-alpine
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
 COPY --from=build --chown=node:node /app ./

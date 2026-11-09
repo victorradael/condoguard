@@ -107,6 +107,10 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://localhost}
       # O Caddy expõe a API em /api/*: o cookie de refresh precisa de Path=/api/auth.
       COOKIE_PATH_PREFIX: /api
+      # Só de quem está na rede `app` (o Caddy) a API aceita X-Real-IP como IP do
+      # cliente nos limites de login e cadastro. Sem isto, todo mundo dividiria
+      # um limite só: o IP do Caddy.
+      TRUSTED_PROXIES: ${APP_SUBNET:-172.28.0.0/24}
       # Papel sem privilégios de dono: é com ele que a RLS da 1b vai valer.
       DATABASE_URL: postgres://condoguard_app:${POSTGRES_APP_PASSWORD:?rode make env}@postgres:5432/condoguard?sslmode=disable
       # Dono do esquema: usado só para rodar as migrações (goose) ao subir.
@@ -329,7 +333,12 @@ services:
 
 networks:
   edge:
+  # Sub-rede fixa: é a que a API confia em TRUSTED_PROXIES. Nela só ficam o
+  # Caddy e o web, nenhum alcançável de fora sem passar pelo Caddy.
   app:
+    ipam:
+      config:
+        - subnet: ${APP_SUBNET:-172.28.0.0/24}
   data:
 
 volumes:

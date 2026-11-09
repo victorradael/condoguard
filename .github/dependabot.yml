@@ -1,0 +1,28 @@
+version: 2
+# api/, web/ e app/ têm o próprio Dependabot nos seus repositórios.
+# Aqui: actions, Dockerfiles de docker/ e as imagens do compose.yaml.
+# Minor e patch saem num PR por ecossistema; major sai sozinho.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directories: [/docker, /docker/backup]
+    schedule:
+      interval: weekly
+    groups:
+      docker:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      compose:
+        update-types: [minor, patch]

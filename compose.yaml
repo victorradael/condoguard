@@ -165,7 +165,7 @@ services:
 
   # ── Dados ──────────────────────────────────────────────────────────────────
   postgres:
-    image: postgres:17.11-alpine
+    image: postgres:18.6-alpine
     restart: unless-stopped
     <<: *logging
     security_opt:
@@ -180,7 +180,10 @@ services:
     ports:
       - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # A 18 guarda os dados em /var/lib/postgresql/18/docker e recusa subir com
+      # o volume em .../data. Volume novo: o da 17 não é reaproveitado (dados
+      # fictícios; `make seed` recria).
+      - postgres18_data:/var/lib/postgresql
       - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
     networks:
       - data
@@ -192,7 +195,7 @@ services:
       start_period: 10s
 
   redis:
-    image: redis:7.4.12-alpine
+    image: redis:8.10.3-alpine
     restart: unless-stopped
     <<: *logging
     security_opt:
@@ -335,7 +338,7 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
-  postgres_data:
+  postgres18_data:
   redis_data:
   mailpit_data:
   minio_data:

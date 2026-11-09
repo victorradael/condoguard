@@ -16,7 +16,7 @@ Este é um monorepo com submódulos Git:
 
 | Submódulo | Descrição | Stack |
 |-----------|-----------|-------|
-| `api/` | REST API do backend | Go 1.25, PostgreSQL 17, Redis 7 |
+| `api/` | REST API do backend | Go 1.27, PostgreSQL 18, Redis 8 |
 | `web/` | Aplicação web (frontend) | — |
 | `app/` | Aplicação mobile | — |
 

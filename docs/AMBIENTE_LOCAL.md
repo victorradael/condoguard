@@ -253,8 +253,16 @@ Os arquivos de `cloudflared/` (fora o modelo) ficam fora do git. O certificado
   Para testar o app no celular, deixe `0.0.0.0`.
 - **Submódulos vazios** (`api/` ou `web/` sem arquivos):
   `git submodule update --init --recursive`.
-- **Muitos 429:** os limites por IP estão em `RATE_LIMIT_EVENTS` e
-  `RATE_LIMIT_AUTH_EVENTS` no `.env`.
+- **Muitos 429:** os limites por IP do Caddy estão em `RATE_LIMIT_EVENTS` e
+  `RATE_LIMIT_AUTH_EVENTS` no `.env`. Os da API (login e cadastro) usam o IP
+  real do cliente, que o Caddy manda em `X-Real-IP`; a API só confia nele
+  vindo da sub-rede `APP_SUBNET` (`TRUSTED_PROXIES`).
+- **Ambiente criado antes da sub-rede fixa** (FAB-16): a rede `app` antiga não
+  tem `APP_SUBNET`, e a API veria o IP do Caddy fora da lista. Rode
+  `make down && make up` uma vez para o Docker recriar a rede. Os dados ficam.
+- **`Pool overlaps with other one on this host`** ao subir: a sub-rede
+  `172.28.0.0/24` colide com outra rede da máquina. Troque `APP_SUBNET` no
+  `.env` e rode `make down` e `make up`.
 - **Navegador avisa que o certificado não é confiável:** `make trust-ca` e
   reinicie o navegador.
 

@@ -66,8 +66,9 @@ const LISTAGENS = [
   '/people?active=true&page=2',
   '/units',
   '/units?pageSize=100&sort=number',
-  '/blocks',
 ];
+// /blocks é só da equipe: a conta descartável do setup() (moradora) leva 403.
+if (__ENV.K6_EMAIL) LISTAGENS.push('/blocks');
 
 function headersDoVU(extra) {
   const vu = __VU || 0;

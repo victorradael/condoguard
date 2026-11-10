@@ -55,6 +55,13 @@ jobs:
         run: make e2e
       - name: k6 (smoke)
         run: make loadtest SCENARIO=smoke
+      - name: Cronometrar make seed-poc (meta FAB-3 < 2 min)
+        run: |
+          start=$(date +%s)
+          make seed-poc
+          secs=$(( $(date +%s) - start ))
+          echo "seed-poc: ${secs}s (limite 120s)" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$secs" -le 120 ] || echo "::warning::seed-poc levou ${secs}s, acima do limite de 120s"
       - name: Backup e restore num volume vazio
         run: make test-backup CONFIRM=1
       - name: Logs em caso de falha

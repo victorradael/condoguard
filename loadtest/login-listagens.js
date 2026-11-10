@@ -10,14 +10,17 @@
 // cabeçalho na porta interna :8080), então o limite por IP vale por usuário,
 // como na vida real. Respostas 429 contam à parte e não entram como erro.
 //
-// Conta: K6_EMAIL/K6_PASSWORD (contas do seed). Sem elas, o setup() cria
-// uma conta descartável via /auth/register (provisório, até a 1c).
+// Conta: K6_EMAIL/K6_PASSWORD (contas do seed: `make seed-poc` na API com
+// SEED_PASSWORD; o porteiro entra sem segundo fator). Sem elas, o setup()
+// cria uma conta descartável via /auth/register.
 
 import http from 'k6/http';
 import { check, fail, sleep } from 'k6';
 import { Counter, Rate } from 'k6/metrics';
 
 const BASE_URL = __ENV.BASE_URL || 'http://caddy:8080';
+// API_URL aponta direto para a API (sem o prefixo /api do Caddy).
+const API = __ENV.API_URL || `${BASE_URL}/api`;
 const SCENARIO = __ENV.SCENARIO || 'smoke';
 const FATOR = SCENARIO === 'pico' ? 2 : 1;
 
@@ -54,14 +57,29 @@ export const options = {
   summaryTrendStats: ['avg', 'med', 'p(90)', 'p(95)', 'p(99)', 'max'],
 };
 
-const LISTAGENS = ['/residents', '/expenses', '/notifications', '/shop-owners'];
+// Listagens da 1c no seed-poc (3 blocos, 120 unidades, ~300 pessoas): a
+// primeira página, a busca por trecho do nome e o filtro por bloco.
+const LISTAGENS = [
+  '/people',
+  '/people?pageSize=100',
+  '/people?q=silva',
+  '/people?active=true&page=2',
+  '/units',
+  '/units?pageSize=100&sort=number',
+];
+// /blocks é só da equipe: a conta descartável do setup() (moradora) leva 403.
+if (__ENV.K6_EMAIL) LISTAGENS.push('/blocks');
 
 function headersDoVU(extra) {
   const vu = __VU || 0;
+  const ip = `10.77.${Math.floor(vu / 250) % 250}.${(vu % 250) + 1}`;
   return Object.assign(
     {
       'Content-Type': 'application/json',
-      'Cf-Connecting-IP': `10.77.${Math.floor(vu / 250) % 250}.${(vu % 250) + 1}`,
+      'Cf-Connecting-IP': ip,
+      // Sem o Caddy (API_URL direto na API, com TRUSTED_PROXIES): o Caddy
+      // sobrescreve este cabeçalho com o de cima.
+      'X-Real-IP': ip,
     },
     extra || {},
   );
@@ -73,6 +91,7 @@ function registrar(res) {
     return;
   }
   erros.add(res.status >= 400);
+  if (res.status >= 400) console.warn(`${res.request.method} ${res.url} -> ${res.status} ${String(res.body).slice(0, 160)}`);
 }
 
 export function setup() {
@@ -84,7 +103,7 @@ export function setup() {
     email = `${username}@k6.condoguard.local`;
     password = `K6-senha-${sufixo}-${Math.random().toString(36).slice(2)}`;
     const res = http.post(
-      `${BASE_URL}/api/auth/register`,
+      `${API}/auth/register`,
       JSON.stringify({ username, email, password }),
       { headers: headersDoVU() },
     );
@@ -97,7 +116,7 @@ let token = null;
 
 function login(conta) {
   const res = http.post(
-    `${BASE_URL}/api/auth/login`,
+    `${API}/auth/login`,
     JSON.stringify({ email: conta.email, password: conta.password }),
     { headers: headersDoVU(), tags: { grupo: 'login', name: 'POST /auth/login' } },
   );
@@ -116,7 +135,7 @@ export default function (conta) {
   }
 
   const path = LISTAGENS[Math.floor(Math.random() * LISTAGENS.length)];
-  const res = http.get(`${BASE_URL}/api${path}`, {
+  const res = http.get(`${API}${path}`, {
     headers: headersDoVU({ Authorization: `Bearer ${token}` }),
     tags: { grupo: 'listagem', name: `GET ${path}` },
   });

@@ -90,6 +90,7 @@ function registrar(res) {
     return;
   }
   erros.add(res.status >= 400);
+  if (res.status >= 400) console.warn(`${res.request.method} ${res.url} -> ${res.status} ${String(res.body).slice(0, 160)}`);
 }
 
 export function setup() {

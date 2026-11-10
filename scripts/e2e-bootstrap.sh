@@ -14,7 +14,7 @@ pw="Bt-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 out=$(printf '%s\n' "$pw" | $COMPOSE exec -T \
 	-e "ADMIN_EMAIL=e2e-sindico-$suffix@e2e.condoguard.local" \
 	-e "ADMIN_USERNAME=e2e-sindico-$suffix" \
-	api condoguard-createadmin) || {
+	api /app/createadmin) || {
 	echo "e2e-bootstrap: createadmin falhou" >&2
 	exit 1
 }

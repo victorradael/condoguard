@@ -85,6 +85,7 @@ check: .env ## Valida o compose (com perfis) e o isolamento do túnel
 
 e2e: ## Testes de ponta a ponta pelo Caddy
 	@sh scripts/trust-ca.sh --export-only
+	@[ -n "$$E2E_EMAIL" ] || sh scripts/e2e-bootstrap.sh
 	@sh e2e/smoke.sh
 
 test-backup: .env ## Prova backup + restore num volume vazio (APAGA os volumes)

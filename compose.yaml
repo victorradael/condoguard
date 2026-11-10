@@ -104,6 +104,11 @@ services:
       APP_ENV: local
       PORT: "8080"
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?rode make env}
+      # Cifra a semente do 2FA (TOTP) no banco.
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?rode make env}
+      # Para onde apontam os links dos e-mails (verificação e recuperação de senha).
+      WEB_BASE_URL: ${WEB_BASE_URL:-https://localhost}
+      REQUIRE_VERIFIED_EMAIL: ${REQUIRE_VERIFIED_EMAIL:-false}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://localhost}
       # O Caddy expõe a API em /api/*: o cookie de refresh precisa de Path=/api/auth.
       COOKIE_PATH_PREFIX: /api

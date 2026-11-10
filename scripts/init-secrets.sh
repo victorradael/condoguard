@@ -8,6 +8,8 @@ cd "$(dirname "$0")/.."
 
 SECRETS="POSTGRES_SUPERUSER_PASSWORD POSTGRES_OWNER_PASSWORD POSTGRES_APP_PASSWORD REDIS_PASSWORD MINIO_ROOT_PASSWORD S3_SECRET_KEY"
 SECRETS_BASE64="JWT_SECRET_KEY"
+# Base64 de exatamente 32 bytes (AES-256): semente do TOTP cifrada em repouso.
+SECRETS_KEY32="TOTP_ENCRYPTION_KEY"
 
 if [ ! -f .env ]; then
 	cp .env.example .env
@@ -29,6 +31,14 @@ rand_base64() {
 		openssl rand -base64 48 | tr -d '\n'
 	else
 		head -c 48 /dev/urandom | base64 | tr -d '\n'
+	fi
+}
+
+rand_key32() {
+	if command -v openssl >/dev/null 2>&1; then
+		openssl rand -base64 32 | tr -d '\n'
+	else
+		head -c 32 /dev/urandom | base64 | tr -d '\n'
 	fi
 }
 
@@ -55,4 +65,7 @@ for var in $SECRETS; do
 done
 for var in $SECRETS_BASE64; do
 	fill "$var" "$(rand_base64)"
+done
+for var in $SECRETS_KEY32; do
+	fill "$var" "$(rand_key32)"
 done

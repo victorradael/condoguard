@@ -63,7 +63,7 @@ services:
       start_period: 10s
 
   cloudflared:
-    image: cloudflare/cloudflared:2026.10.7
+    image: cloudflare/cloudflared:2026.11.1
     profiles: ["poc"]
     restart: unless-stopped
     <<: [*hardening, *logging]
@@ -228,7 +228,7 @@ services:
       retries: 10
 
   mailpit:
-    image: axllent/mailpit:v1.33.1
+    image: axllent/mailpit:v1.34.0
     restart: unless-stopped
     <<: *logging
     security_opt:
@@ -325,7 +325,7 @@ services:
         condition: service_healthy
 
   k6:
-    image: grafana/k6:2.3.0
+    image: grafana/k6:2.4.0
     profiles: ["tools"]
     <<: [*hardening, *logging]
     user: "${HOST_UID:-12345}:${HOST_GID:-12345}"
